@@ -93,16 +93,16 @@ packets = {
         {"name": "Pasztetwaga:300g", "quantity": 1},
     ],
 }
-#html content cleaner
+#oczyszczenie kontentu html
 def clean_html(content):
     return re.sub(r'<br>|<I>|<\/I>|<b>|<\/b>', '', content)
 
-#funckja przetwarzania pakietow
+#Przetworzenie pakietów 
 def process_packets(df):
     additional_rows = []
     for index, row in df.iterrows():
         item_name = row['Item Name']
-        quantity = int(row['Quantity (- Refund)'])  # Upewnij się, że ilość jest liczbą całkowitą do podsumowania
+        quantity = int(row['Quantity (- Refund)'])  #ilość jest liczbą całkowitą do podsumowania
         if item_name in packets:
             for content in packets[item_name]:
                 for _ in range(quantity):
@@ -115,13 +115,13 @@ def process_packets(df):
     # Konwertacja do DataFrame'u
     new_df = pd.DataFrame(additional_rows, columns=['Item Name', 'Quantity (- Refund)'])
     
-    # Group by 'Item Name' and sum the 'Quantity (- Refund)', uwzględniając różne opcje
+    # Pogrupuj kolumne 'Item Name' i zrób sume w kolumnie 'Quantity (- Refund)', uwzględniając różne opcje
     grouped_df = new_df.groupby('Item Name').sum().reset_index()
     
     return grouped_df
 
 def move_customer_note_to_end(df_kurierzy):
-    # Sprawdzamy, czy kolumna "Customer Note" istnieje
+    # Czy istnieje kolumna Customer Note
     if "Customer Note" in df_kurierzy.columns:
         # Przenosimy kolumnę "Customer Note" na sam koniec
         customer_note = df_kurierzy.pop("Customer Note")  # Wyciągamy kolumnę
@@ -129,7 +129,7 @@ def move_customer_note_to_end(df_kurierzy):
     return df_kurierzy
 
 def highlight_phrase(worksheet, phrase="w kawałku"):
-    # Tworzymy obiekt stylu - czerwone tło
+    # ozaczenie kawałków - czerwone tło
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
     
     # Iterujemy przez wszystkie komórki w arkuszu
@@ -139,6 +139,7 @@ def highlight_phrase(worksheet, phrase="w kawałku"):
                 # Jeżeli fraza "w kawałku" jest w komórce, ustawiamy czerwone tło
                 cell.fill = red_fill
 
+#stylowanie kolumn
 def adjust_column_widths(worksheet, df):
     for i, column in enumerate(df):
         max_length = max(df[column].astype(str).map(len).max(), len(str(column))) + 2
@@ -238,18 +239,18 @@ def main():
     df_processed = df_original.copy()
     df_processed['Item Name'] = df_processed['Item Name'].apply(clean_html)
     
-    # Process packets and sum repeated products
+    # Przetwarzanie pakietów i obliczanie powtórzonych produktów
     df_produkty = process_packets(df_processed)
 
-  # Calculate total weights and save to new sheet
+  # Obliczanie wagi całkowitej i tworzenie nowego sheet'u
     df_total_weights = calculate_total_weight(df_produkty)
     save_total_weights_to_excel(input_file_path, df_total_weights)
 
-    # Save processed data to "Produkty" sheet
+    # Zapisywanie info do "Produkty" sheet
     with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df_produkty.to_excel(writer, sheet_name='Produkty', index=False)
 
-    # Process data for "Kurierzy" sheet
+    # Przetwarzanie informacji do "Kurierzy" sheet
     columns_to_delete = [
         'Line number', 'Email (Billing)', 'First Name (Shipping)',
         'Last Name (Shipping)', 'Address 1&2 (Shipping)', 'City (Shipping)', 'Postcode (Shipping)',
@@ -261,11 +262,11 @@ def main():
     df_kurierzy.reset_index(drop=True, inplace=True)
     df_kurierzy = move_customer_note_to_end(df_kurierzy)
 
-    # Save data to "Kurierzy" sheet
+    # Zapisywanie informacji do "Kurierzy" sheet
     with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df_kurierzy.to_excel(writer, sheet_name='Kurierzy', index=False)
 
-    # Reopen the workbook to adjust styles for both sheets
+    # Otwórz ponownie skoroszyt, aby dostosować style obu arkuszy
     workbook = openpyxl.load_workbook(input_file_path)
     worksheet_produkty = workbook['Produkty']
     highlight_phrase(worksheet_produkty, phrase="w kawałku")
