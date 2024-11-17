@@ -1,3 +1,1 @@
-Python
-
-XLSX content editor 
+Python script to process raw generated e-commerce data
