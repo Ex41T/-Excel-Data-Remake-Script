@@ -9,6 +9,7 @@ from openpyxl.styles import Font
 from openpyxl.styles import PatternFill
 from openpyxl import load_workbook
 
+
 packets = {
         "Pakiet Klasycznywaga: 1.15kg - 150 g. w plastrach (vacum)": [
         {"name": "Krakowska Waga:150g / 0.5 kg / 1 kg - 150 g. w plastrach (vacum)", "quantity": 1},
@@ -93,57 +94,60 @@ packets = {
         {"name": "Pasztetwaga:400g", "quantity": 1},
     ],
 }
-#oczyszczenie kontentu html
+
+# Raw data clean func (clearing the cells with included html content)
 def clean_html(content):
     return re.sub(r'<br>|<I>|<\/I>|<b>|<\/b>', '', content)
 
-#Przetworzenie pakietów 
+# Addjust packets items into products
 def process_packets(df):
     additional_rows = []
     for index, row in df.iterrows():
         item_name = row['Item Name']
-        quantity = int(row['Quantity (- Refund)'])  #ilość jest liczbą całkowitą do podsumowania
+        quantity = int(row['Quantity (- Refund)'])
         if item_name in packets:
             for content in packets[item_name]:
                 for _ in range(quantity):
-                    # Dodajemy opcje takie jak "papier" czy "vacum" do produktu
+                    #  papier & vacuum
                     full_item_name = content["name"]
                     additional_rows.append([full_item_name, content["quantity"]])
         else:
             additional_rows.append([item_name, quantity])
     
-    # Konwertacja do DataFrame'u
     new_df = pd.DataFrame(additional_rows, columns=['Item Name', 'Quantity (- Refund)'])
-    
-    # Pogrupuj kolumne 'Item Name' i zrób sume w kolumnie 'Quantity (- Refund)', uwzględniając różne opcje
+    # group 'item name' column
     grouped_df = new_df.groupby('Item Name').sum().reset_index()
     
     return grouped_df
 
+
+#extracting 'Customer Note' column to the end for clean and logic raport
 def move_customer_note_to_end(df_kurierzy):
-    # Czy istnieje kolumna Customer Note
+    
     if "Customer Note" in df_kurierzy.columns:
-        # Przenosimy kolumnę "Customer Note" na sam koniec
-        customer_note = df_kurierzy.pop("Customer Note")  # Wyciągamy kolumnę
-        df_kurierzy["Customer Note"] = customer_note      # Wstawiamy ją na koniec
+        # Tworzymy listę kolumn z wyjątkiem 'Customer Note', a następnie dodajemy 'Customer Note' na koniec
+        cols = [col for col in df_kurierzy.columns if col != "Customer Note"] + ["Customer Note"]
+        df_kurierzy = df_kurierzy[cols]
     return df_kurierzy
 
+
 def highlight_phrase(worksheet, phrase="w kawałku"):
-    # ozaczenie kawałków - czerwone tło
+    # mark pieces on red
     red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
     
-    # Iterujemy przez wszystkie komórki w arkuszu
+    # Iterate through all cells in the worksheet
     for row in worksheet.iter_rows():
         for cell in row:
             if isinstance(cell.value, str) and phrase in cell.value:
-                # Jeżeli fraza "w kawałku" jest w komórce, ustawiamy czerwone tło
                 cell.fill = red_fill
 
-#stylowanie kolumn
+
+#sheet styles
 def adjust_column_widths(worksheet, df):
     for i, column in enumerate(df):
         max_length = max(df[column].astype(str).map(len).max(), len(str(column))) + 2
         worksheet.column_dimensions[get_column_letter(i+1)].width = max_length
+
 
 def make_columns_bold(df, worksheet, columns):
     bold_font = Font(bold=True)
@@ -153,16 +157,15 @@ def make_columns_bold(df, worksheet, columns):
             worksheet[col_idx + str(row)].font = bold_font
 
 
-
-
-# Wyciąganie nazwy produktu do słowa "Waga" lub spacji przed "Waga"
+# Extracting the product name to the word "Weight" or a space before "Weight"
 def extract_product_name(item_name):
     match = re.match(r"(.+?)\s*(Waga|waga)", item_name)
     if match:
         return match.group(1).strip()
     return item_name
 
-# Lista produktów do wykluczenia
+
+
 EXCLUDE_PRODUCTS = [
     "Eko Twaróg Półtłusty 220g Prosto z Farmy",
     "Masło Extra 82% Tłuszczu Eko 200 G", 
@@ -181,52 +184,14 @@ EXCLUDE_PRODUCTS = [
     "Kiełbasa Swojska",
     "Pakiet Pasztetów"
 ]
-# Funkcja do wykluczania nieistotnych produktów
+
+
+# Func to exclude products
 def should_exclude_product(product_name):
     return product_name in EXCLUDE_PRODUCTS
 
-# Funkcja do obliczania sumarycznej wagi dla wędlin i kiełbas
-def calculate_total_weight(df):
-    PRODUCT_WEIGHTS = {
-    "Kiełbasa Śląska": 0.400,  # 400g na sztukę
-    "Biała Kiełbasa": 0.500,   # 500g na sztukę
-    "Serdelki": 0.450,         # 450g na sztukę
-    "Kaszanka": 0.450,         # 450g na sztukę
-    "Salceson": 0.300          # 300g na sztukę
-}
 
-    products_weights = {}
-
-    for index, row in df.iterrows():
-        product_name = extract_product_name(row['Item Name'])  # Wyciągamy nazwę produktu
-        quantity = row['Quantity (- Refund)']
-
-        # Sprawdzamy, czy produkt należy wykluczyć
-        if should_exclude_product(product_name):
-            continue
-
-        # Pobieramy wagę dla danego produktu
-        base_weight = PRODUCT_WEIGHTS.get(product_name)
-        
-        if base_weight:
-            # Jeśli produkt ma zdefiniowaną stałą wagę w `PRODUCT_WEIGHTS`
-            total_weight = base_weight * quantity
-        else:
-            # Obliczamy wagę dla innych produktów, np. w plastrach lub kawałkach
-            total_weight = calculate_weight_based_on_type(row['Item Name'], quantity)
-
-        # Sumujemy ilości dla tego samego produktu
-        if product_name in products_weights:
-            products_weights[product_name] += total_weight
-        else:
-            products_weights[product_name] = total_weight
-
-    # Konwertujemy wyniki do DataFrame
-    total_weight_df = pd.DataFrame(list(products_weights.items()), columns=["Produkt", "Suma(kg)"])
-
-    return total_weight_df
-
-# Funkcja określająca wagę dla produktów w plastrach lub kawałkach
+# func defining product method weight
 def calculate_weight_based_on_type(item_name, quantity_sum):
     if "w plastrach" in item_name:
         return 0.150 * quantity_sum  # 150g = 0.150kg
@@ -238,17 +203,59 @@ def calculate_weight_based_on_type(item_name, quantity_sum):
     return 0
 
 
-# Funkcja zapisywania wyników do nowego arkusza Excela
+# func that calculates the total weight for sausages based on quantity (example if quantity for  "Kiełbasa Śląska" is 10 it will be calculated 10x 0.4kg )
+def calc_total_weight(df):
+    PRODUCT_WEIGHTS = {
+    "Kiełbasa Śląska": 0.400,  
+    "Biała Kiełbasa": 0.500,   
+    "Serdelki": 0.450,         
+    "Kaszanka": 0.450,         
+    "Salceson": 0.300          
+}
+
+    products_weights = {}
+
+    for index, row in df.iterrows():
+        product_name = extract_product_name(row['Item Name'])  # extract product name
+        quantity = row['Quantity (- Refund)']
+
+        # check if product has to be excluded
+        if should_exclude_product(product_name):
+            continue
+
+        # Get weight of the product
+        base_weight = PRODUCT_WEIGHTS.get(product_name)
+        
+        if base_weight:
+            # If the product has defined fixed weight in `PRODUCT_WEIGHTS`
+            total_weight = base_weight * quantity
+        else:
+            # Calc weight for other products e.g in pieces or slices
+            total_weight = calculate_weight_based_on_type(row['Item Name'], quantity)
+
+        # Sum qunatities for the same product (repeated cells with the same content)
+        if product_name in products_weights:
+            products_weights[product_name] += total_weight
+        else:
+            products_weights[product_name] = total_weight
+
+    # convert do dataframe
+    total_weight_df = pd.DataFrame(list(products_weights.items()), columns=["Produkt", "Suma(kg)"])
+
+    return total_weight_df
+
+
 def save_total_weights_to_excel(input_file_path, df_total_weights):
     with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df_total_weights.to_excel(writer, sheet_name='Produkty Gramatury', index=False)
+
 
 def open_file_dialog():
     Tk().withdraw()
     return askopenfilename()
 
+
 def save_all_data_to_excel(input_file_path, df_produkty, df_total_weights, df_kurierzy):
-    # Otwieramy plik Excel raz i zapisujemy wszystkie arkusze naraz
     with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df_produkty.to_excel(writer, sheet_name='Produkty', index=False)
         df_total_weights.to_excel(writer, sheet_name='Produkty Gramatury', index=False)
@@ -266,13 +273,13 @@ def main():
     df_processed = df_original.copy()
     df_processed['Item Name'] = df_processed['Item Name'].apply(clean_html)
     
-    # Przetwarzanie pakietów i obliczanie powtórzonych produktów
+    #Packet processing and repeat 'items name' column content calc
     df_produkty = process_packets(df_processed)
 
-    # Obliczanie wagi całkowitej i tworzenie nowego sheet'u
-    df_total_weights = calculate_total_weight(df_produkty)
+    # calc weight
+    df_total_weights = calc_total_weight(df_produkty)
 
-    # Przetwarzanie informacji do "Kurierzy" sheet
+    # Convert raw data for 'Kurierzy' sheet
     columns_to_delete = [
         'Line number', 'Email (Billing)', 'First Name (Shipping)',
         'Last Name (Shipping)', 'Address 1&2 (Shipping)', 'City (Shipping)', 'Postcode (Shipping)',
@@ -284,10 +291,10 @@ def main():
     df_kurierzy.reset_index(drop=True, inplace=True)
     df_kurierzy = move_customer_note_to_end(df_kurierzy)
 
-    # Zapisujemy wszystkie dane na raz
+
     save_all_data_to_excel(input_file_path, df_produkty, df_total_weights, df_kurierzy)
 
-    # Otwórz ponownie skoroszyt, aby dostosować style obu arkuszy
+    # Reopen workbook, adjust styles for both sheets
     workbook = openpyxl.load_workbook(input_file_path)
     worksheet_produkty = workbook['Produkty']
     highlight_phrase(worksheet_produkty, phrase="w kawałku")
@@ -301,6 +308,6 @@ def main():
 
     print(f"Zapisane >>> {input_file_path}")
 
-# Uruchomienie funkcji głównej
+
 if __name__ == "__main__":
     main()
