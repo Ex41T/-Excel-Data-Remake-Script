@@ -87,10 +87,10 @@ packets = {
         {"name": "Szynka ChudaWaga:150 g /  0.5 kg / 1 kg /  - 150 g. w plastrach (vacum)", "quantity": 1},
         {"name": "Szynka z Tłuszczem Waga:150 g / 0.5 kg / 1 kg - 150 g. w plastrach (vacum)", "quantity": 1},
     ],
-    "Pakiet Pasztetów waga: 0.9kg": [
-        {"name": "Pasztet z Śliwkąwaga:300g", "quantity": 1},
-        {"name": "Pasztet z Żurawinąwaga:300g", "quantity": 1},
-        {"name": "Pasztetwaga:300g", "quantity": 1},
+    "Pakiet Pasztetów waga: 1.2kg": [
+        {"name": "Pasztet z Śliwkąwaga:400g", "quantity": 1},
+        {"name": "Pasztet z Żurawinąwaga:400g", "quantity": 1},
+        {"name": "Pasztetwaga:400g", "quantity": 1},
     ],
 }
 #oczyszczenie kontentu html
@@ -153,11 +153,7 @@ def make_columns_bold(df, worksheet, columns):
             worksheet[col_idx + str(row)].font = bold_font
 
 
-# Lista produktów do wykluczenia
-EXCLUDE_PRODUCTS = [
-    "Eko Jogurt", "Eko Mleko", "Eko Zsiadłe Mleko", "Eko Śmietana", "Jajka Ekologiczne", 
-    "Polędwiczka Wieprzowa", "Pasztet z Śliwką", "Pasztet z Żurawiną", "Pasztet","Kiełbasa Myśliwska","Kiełbasa Jałowcowa","Kiełbasa Swojska"
-]
+
 
 # Wyciąganie nazwy produktu do słowa "Waga" lub spacji przed "Waga"
 def extract_product_name(item_name):
@@ -166,58 +162,81 @@ def extract_product_name(item_name):
         return match.group(1).strip()
     return item_name
 
-# Funkcja określająca wagę dla produktów w plastrach lub kawałkach
-def calculate_weight_based_on_type(item_name, quantity_sum):
-    if "w plastrach" in item_name:
-        return 0.150 * quantity_sum  # 150g = 0.150kg
-    elif "w kawałku" in item_name:
-        return 0.500 * quantity_sum  # 500g = 0.500kg
-    return 0
-
+# Lista produktów do wykluczenia
+EXCLUDE_PRODUCTS = [
+    "Eko Twaróg Półtłusty 220g Prosto z Farmy",
+    "Masło Extra 82% Tłuszczu Eko 200 G", 
+    "Eko Jogurt Naturalny  250g",
+    "Smalec ze Skwarkami", 
+    "Eko Mleko 3,9 %  750ml", 
+    "Eko Zsiadłe Mleko 450g", 
+    "Eko Śmietana 18% 250g", 
+    "Jajka Ekologiczne  ilość: 10 szt. ", 
+    "Polędwiczka Wieprzowa", 
+    "Pasztet z Śliwką", 
+    "Pasztet z Żurawiną", 
+    "Pasztet",
+    "Kiełbasa Myśliwska",
+    "Kiełbasa Jałowcowa",
+    "Kiełbasa Swojska",
+    "Pakiet Pasztetów"
+]
 # Funkcja do wykluczania nieistotnych produktów
 def should_exclude_product(product_name):
-    for keyword in EXCLUDE_PRODUCTS:
-        if keyword in product_name:
-            return True
-    return False
+    return product_name in EXCLUDE_PRODUCTS
 
 # Funkcja do obliczania sumarycznej wagi dla wędlin i kiełbas
 def calculate_total_weight(df):
+    PRODUCT_WEIGHTS = {
+    "Kiełbasa Śląska": 0.400,  # 400g na sztukę
+    "Biała Kiełbasa": 0.500,   # 500g na sztukę
+    "Serdelki": 0.450,         # 450g na sztukę
+    "Kaszanka": 0.450,         # 450g na sztukę
+    "Salceson": 0.300          # 300g na sztukę
+}
+
     products_weights = {}
-    
+
     for index, row in df.iterrows():
         product_name = extract_product_name(row['Item Name'])  # Wyciągamy nazwę produktu
         quantity = row['Quantity (- Refund)']
-        
+
         # Sprawdzamy, czy produkt należy wykluczyć
         if should_exclude_product(product_name):
             continue
+
+        # Pobieramy wagę dla danego produktu
+        base_weight = PRODUCT_WEIGHTS.get(product_name)
         
-        # Obliczamy wagę dla kiełbas (na podstawie ilości i stałej wagi np. 450g)
-        if "Kiełbasa Śląska" in product_name:
-            total_weight = 0.400 * quantity  # 400g na sztukę
-        elif "Biała Kiełbasa" in product_name:
-            total_weight = 0.500 * quantity  # 500g na sztukę
-        elif "Serdelki" in product_name:
-            total_weight = 0.450 * quantity  # 450g na sztukę
-        elif "Kaszanka" in product_name:
-            total_weight = 0.450 * quantity  # 450g na sztukę
-        elif "Salceson" in product_name:
-            total_weight = 0.300 * quantity  # Zakładamy, że 300g na sztukę
+        if base_weight:
+            # Jeśli produkt ma zdefiniowaną stałą wagę w `PRODUCT_WEIGHTS`
+            total_weight = base_weight * quantity
         else:
-            # Obliczamy dla innych produktów: plastrach lub kawałkach
+            # Obliczamy wagę dla innych produktów, np. w plastrach lub kawałkach
             total_weight = calculate_weight_based_on_type(row['Item Name'], quantity)
-        
+
         # Sumujemy ilości dla tego samego produktu
         if product_name in products_weights:
             products_weights[product_name] += total_weight
         else:
             products_weights[product_name] = total_weight
-    
+
     # Konwertujemy wyniki do DataFrame
     total_weight_df = pd.DataFrame(list(products_weights.items()), columns=["Produkt", "Suma(kg)"])
-    
+
     return total_weight_df
+
+# Funkcja określająca wagę dla produktów w plastrach lub kawałkach
+def calculate_weight_based_on_type(item_name, quantity_sum):
+    if "w plastrach" in item_name:
+        return 0.150 * quantity_sum  # 150g = 0.150kg
+    elif "w kawałku" in item_name:
+        if "0.5 kg" in item_name:
+            return 0.500 * quantity_sum  # 0.5 kg na sztukę
+        elif "1 kg" in item_name:
+            return 1.000 * quantity_sum  # 1 kg na sztukę
+    return 0
+
 
 # Funkcja zapisywania wyników do nowego arkusza Excela
 def save_total_weights_to_excel(input_file_path, df_total_weights):
@@ -227,6 +246,14 @@ def save_total_weights_to_excel(input_file_path, df_total_weights):
 def open_file_dialog():
     Tk().withdraw()
     return askopenfilename()
+
+def save_all_data_to_excel(input_file_path, df_produkty, df_total_weights, df_kurierzy):
+    # Otwieramy plik Excel raz i zapisujemy wszystkie arkusze naraz
+    with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+        df_produkty.to_excel(writer, sheet_name='Produkty', index=False)
+        df_total_weights.to_excel(writer, sheet_name='Produkty Gramatury', index=False)
+        df_kurierzy.to_excel(writer, sheet_name='Kurierzy', index=False)
+
 
 def main():
     input_file_path = open_file_dialog()
@@ -242,13 +269,8 @@ def main():
     # Przetwarzanie pakietów i obliczanie powtórzonych produktów
     df_produkty = process_packets(df_processed)
 
-  # Obliczanie wagi całkowitej i tworzenie nowego sheet'u
+    # Obliczanie wagi całkowitej i tworzenie nowego sheet'u
     df_total_weights = calculate_total_weight(df_produkty)
-    save_total_weights_to_excel(input_file_path, df_total_weights)
-
-    # Zapisywanie info do "Produkty" sheet
-    with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-        df_produkty.to_excel(writer, sheet_name='Produkty', index=False)
 
     # Przetwarzanie informacji do "Kurierzy" sheet
     columns_to_delete = [
@@ -262,9 +284,8 @@ def main():
     df_kurierzy.reset_index(drop=True, inplace=True)
     df_kurierzy = move_customer_note_to_end(df_kurierzy)
 
-    # Zapisywanie informacji do "Kurierzy" sheet
-    with pd.ExcelWriter(input_file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-        df_kurierzy.to_excel(writer, sheet_name='Kurierzy', index=False)
+    # Zapisujemy wszystkie dane na raz
+    save_all_data_to_excel(input_file_path, df_produkty, df_total_weights, df_kurierzy)
 
     # Otwórz ponownie skoroszyt, aby dostosować style obu arkuszy
     workbook = openpyxl.load_workbook(input_file_path)
@@ -276,10 +297,10 @@ def main():
     worksheet_kurierzy = workbook['Kurierzy']
     adjust_column_widths(worksheet_kurierzy, df_kurierzy)
 
-    
     workbook.save(input_file_path)
 
     print(f"Zapisane >>> {input_file_path}")
 
+# Uruchomienie funkcji głównej
 if __name__ == "__main__":
-    main()  
+    main()
