@@ -323,7 +323,7 @@ def main():
 
     workbook.save(input_file_path)
 
-    print(f"Zapisane >>> {input_file_path}")
+    print(f"File saved >>> {input_file_path}")
 
 
 if __name__ == "__main__":
