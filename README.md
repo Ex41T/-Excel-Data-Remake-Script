@@ -48,9 +48,9 @@
   Postcode (Shipping)<br><br>
   Order Subtotal Amount<br><br>
   Order Shipping Amount<br><br>
-  Item Name<br>r<br>
+  Item Name<br><br>
   Quantity (-Refund)<br><br>
-  SKU<br>r<br>
+  SKU<br><br>
   Item #<br><br>
   Output Data<br><br>
   Products (Produkty):<br><br></h5>
